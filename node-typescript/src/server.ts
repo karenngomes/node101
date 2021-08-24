@@ -1,8 +1,16 @@
 import express from 'express';
+import cors from "cors";
 import path from 'path';
 import routes from './routes';
 
 const app = express();
+
+app.use(cors()); // allows any domain access this API
+// in prod:
+// app.use(cors({
+//     origin: ['example-domain.com', 'another-domain-if-you-need-it.com']
+// }))
+
 app.use(express.json())
 
 app.use(routes);
