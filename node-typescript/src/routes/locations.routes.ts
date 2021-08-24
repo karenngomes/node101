@@ -10,19 +10,23 @@ const upload = multer(multerConfig);
 locationsRouter.get("/", async (request, response) => {
   const { city, uf, items } = request.query;
 
-  const parsedItems = String(items)
-    .split(",")
-    .map((item) => {
-      return Number(item.trim());
-    });
+  let locations = [];
 
-  const locations = await knex("locations")
-    .join("location_items", "locations.id", "=", "location_items.location_id")
-    .whereIn("location_items.item_id", parsedItems)
-    .where("city", String(city))
-    .where("uf", String(uf))
-    .distinct()
-    .select("locations.*");
+  if (city && uf && items) {
+    const parsedItems = String(items)
+      .split(",")
+      .map((item) => Number(item.trim()));
+
+    locations = await knex("locations")
+      .join("location_items", "locations.id", "=", "location_items.location_id")
+      .whereIn("location_items.item_id", parsedItems)
+      .where("city", String(city))
+      .where("uf", String(uf))
+      .distinct()
+      .select("locations.*");
+  } else {
+    locations = await knex("locations").select("*");
+  }
 
   return response.json(locations);
 });
@@ -59,51 +63,60 @@ locationsRouter.post("/", async (request, response) => {
     uf,
   };
 
+  try {
   const transaction = await knex.transaction();
 
   const newIds = await transaction("locations").insert(location);
-
+  debugger;
   const locationId = newIds[0];
 
-  const locationItems = items.map(async (item_id: number) => {
-    const selectedItem = await transaction("items")
-      .where("id", item_id)
-      .first();
-    if (!selectedItem) {
-      return response.status(400).json({ message: "Item not found" });
-    }
-    return {
-      item_id,
-      location_id: locationId,
-    };
-  });
+  const locationItems = await Promise.all(
+    items.map(async (item_id: number) => {
+      const selectedItem = await transaction("items").where("id", item_id).first();
+      if (!selectedItem) {
+        return response.status(400).json({ message: "Item not found" });
+      }
+      return {
+        item_id,
+        location_id: locationId,
+      };
+    })
+  );
 
   await transaction("location_items").insert(locationItems);
 
   await transaction.commit();
 
   return response.json({ id: locationId, ...location });
-});
-
-locationsRouter.put("/:id", upload.single('image'), async (request, response) => {
-  const { id } = request.params;
-
-  const image = request.file?.filename;
-
-  const location = await knex("locations").where("id", id).first();
-
-  if (!location) {
-    return response.status(400).json({ message: "Location not found" });
+  } catch (error) {
+    console.log(error)
+    return response.status(400).json({ message: "Something is wrong" });
   }
-
-  await knex("locations")
-    .update({ ...location, image })
-    .where("id", id);
-
-  return response.json({
-    ...location,
-    image,
-  });
 });
+
+locationsRouter.put(
+  "/:id",
+  upload.single("image"),
+  async (request, response) => {
+    const { id } = request.params;
+
+    const image = request.file?.filename;
+
+    const location = await knex("locations").where("id", id).first();
+
+    if (!location) {
+      return response.status(400).json({ message: "Location not found" });
+    }
+
+    await knex("locations")
+      .update({ ...location, image })
+      .where("id", id);
+
+    return response.json({
+      ...location,
+      image,
+    });
+  }
+);
 
 export default locationsRouter;
