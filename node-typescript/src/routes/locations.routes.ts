@@ -25,9 +25,11 @@ locationsRouter.post("/", async (request, response) => {
   const locationId = newIds[0];
 
   const locationItems = items.map(async (item_id: number) => {
-    const selectedItem = await transaction("items").where("id", item_id).first();
+    const selectedItem = await transaction("items")
+      .where("id", item_id)
+      .first();
     if (!selectedItem) {
-      return response.status(400).json({message: "Item doesn't found"})
+      return response.status(400).json({ message: "Item not found" });
     }
     return {
       item_id,
@@ -40,6 +42,23 @@ locationsRouter.post("/", async (request, response) => {
   await transaction.commit();
 
   return response.json({ id: locationId, ...location });
+});
+
+locationsRouter.get("/:id", async (request, response) => {
+  const { id } = request.params;
+
+  const location = await knex("locations").where("id", id).first();
+
+  if (!location) {
+    return response.status(400).json({ message: "Location not found" });
+  }
+
+  const items = await knex("items")
+    .join("location_items", "items.id", "=", "location_items.item_id")
+    .where("location_items.location_id", id)
+    .select("items.title");
+
+  return response.json({ location, items });
 });
 
 export default locationsRouter;
